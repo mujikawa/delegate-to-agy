@@ -102,7 +102,8 @@ tests/fixtures/              Linked-worktree validation fixture
 Use the validator bundled with Codex's `skill-creator` skill:
 
 ```powershell
-python <CODEX_HOME>/skills/.system/skill-creator/scripts/quick_validate.py .
+python (Join-Path $codexRoot `
+    'skills\.system\skill-creator\scripts\quick_validate.py') .
 ```
 
 `tests/fixtures/linked-worktree` is intentionally checked in with an
