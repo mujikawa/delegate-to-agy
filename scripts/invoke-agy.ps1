@@ -129,7 +129,10 @@ function Get-GitChangedPaths {
             Stop-Wrapper 'git change inspection failed'
         }
         foreach ($path in $raw.Split([char]0, [System.StringSplitOptions]::RemoveEmptyEntries)) {
-            [void]$all.Add($path.Trim())
+            $normalizedPath = $path.TrimEnd("`r", "`n").Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+            if (-not [string]::IsNullOrEmpty($normalizedPath)) {
+                [void]$all.Add($normalizedPath)
+            }
         }
     }
     if ($all.Count -gt 5000) {
