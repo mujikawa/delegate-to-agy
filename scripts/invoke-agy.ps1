@@ -277,7 +277,8 @@ try {
         $beforeGit = @(Get-GitChangedPaths -GitPath $gitPath -WorkspaceRoot $workspaceRoot)
         $unexpectedBaseline = @($beforeGit | Where-Object {
             -not $_.Equals($taskRelative, [System.StringComparison]::OrdinalIgnoreCase) -and
-            -not ($receiptExistedBefore -and $_.Equals($receiptRelative, [System.StringComparison]::OrdinalIgnoreCase))
+            -not ($receiptExistedBefore -and $_.Equals($receiptRelative, [System.StringComparison]::OrdinalIgnoreCase)) -and
+            -not ($cacheHit -and (Test-PathCovered -RelativePath $_ -AllowedRelativePaths $allowedWriteRelative))
         })
         if ($unexpectedBaseline.Count -ne 0) { Stop-Wrapper 'linked worktree must be clean except for its task and matching receipt files' }
     } else {
