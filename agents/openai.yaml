@@ -1,0 +1,4 @@
+interface:
+  display_name: "Delegate to AGY"
+  short_description: "Delegate implementation to AGY, then review and verify"
+  default_prompt: "Use $delegate-to-agy to delegate this implementation to AGY, review its changes, and verify the result."
