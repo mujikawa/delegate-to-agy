@@ -41,4 +41,22 @@ $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path ([Environ
 
 Use `-ValidateOnly` while preparing or testing a task. It validates the task and prints the resolved scope without contacting AGY.
 
+## Worker authorization visibility
+
+When a coordinator-owned Codex subagent invokes the wrapper, the host approval
+reviewer may require the user's external-delegation authorization to be directly
+visible in that worker's trusted input. A coordinator message can carry scope but
+may not satisfy that trust check. Create the worker after authorization or use a
+supported context-inheritance mechanism. If a pre-process approval rejects a
+worker created before authorization, do not keep retrying the same relay or move
+execution into the coordinator. Create a replacement only after the user
+explicitly authorizes the replacement topology and its directly inherited AGY
+scope. A rejection before process creation is not an AGY invocation.
+
+Receipts bind the task and actual allowed outputs. They do not prove that an
+output satisfies a semantic or cross-platform byte contract. For portable exact
+text, define repository-owned EOL policy (for example `.gitattributes`) and verify
+the immutable committed blob; use raw worktree bytes only when host-specific
+materialization is intentionally part of acceptance.
+
 The companion Codex rule allows only the installed wrapper executable path. Preview it with `scripts/install-rule.ps1`; install it only with `scripts/install-rule.ps1 -Apply`. Because subsequent arguments are allowed by a prefix rule, the wrapper must remain outside AGY's writable workspace and must continue rejecting unknown parameters and unsafe task content. After installing or changing a rule, restart Codex and verify it with `codex execpolicy check`.

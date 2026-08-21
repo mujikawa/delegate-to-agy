@@ -48,6 +48,12 @@ git clone https://github.com/mujikawa/delegate-to-agy.git `
 Restart Codex so it discovers the skill. You can then ask Codex to use
 `$delegate-to-agy` for a scoped implementation task.
 
+For a reproducible release installation, ask Codex:
+
+```text
+Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.0.
+```
+
 ## Optional unattended execution
 
 AGY needs its authenticated host profile and network access, which are not
@@ -73,6 +79,9 @@ requirements, read [Unattended automation](references/automation.md).
 - Invoking the skill authorizes sending the scoped task and explicitly listed
   source files to AGY. Do not include secrets, credentials, `.env` files, or
   unrelated proprietary code.
+- A worker that launches AGY may need to inherit that user authorization directly;
+  coordinator-relayed text is not guaranteed to satisfy the host approval trust
+  boundary.
 - AGY runs with `--sandbox`; the wrapper does not use
   `--dangerously-skip-permissions`.
 - Paths must remain inside the delegated workspace. Rooted paths, `..` escapes,
@@ -85,11 +94,15 @@ requirements, read [Unattended automation](references/automation.md).
   separate user authorization.
 - AGY's success response is not treated as proof. Codex remains responsible for
   reviewing the actual changes and running verification.
+- Receipts prove task/output binding, not semantic correctness. Portable exact
+  text should use repository-owned EOL policy and immutable-blob verification.
 
 ## Repository layout
 
 ```text
 SKILL.md                     Skill entrypoint and review workflow
+CHANGELOG.md                  Version history
+RELEASE-v0.1.0.md             First tagged-release notes
 agents/openai.yaml           Codex UI metadata
 references/automation.md     Unattended task schema and invariants
 scripts/invoke-agy.ps1       Validated AGY invocation wrapper
