@@ -10,6 +10,12 @@ Use AGY as an external implementation agent. Codex remains responsible for scope
 ## Preconditions and boundaries
 
 - Treat explicit use of this skill as authorization to send the scoped task and relevant workspace code to AGY. Do not send secrets, tokens, unrelated files, or environment-variable values.
+- When a Codex subagent will invoke AGY, ensure that worker directly inherits the
+  user's explicit external-delegation authorization as trusted input. Some host
+  approval surfaces do not treat coordinator-relayed text as equivalent user
+  authorization. If launch is rejected at that boundary, do not bypass it or
+  repeatedly resend the same relay; create a replacement only with explicit user
+  authorization for that topology and direct inheritance.
 - Preserve the user's existing changes. Never require a clean worktree, discard changes, create commits, push, install dependencies, or perform external or destructive actions unless the user separately authorized them.
 - Run only one write-capable agent in the target workspace at a time. Do not let AGY and another agent edit the same files concurrently.
 - Verify `agy` is available with `Get-Command agy` on Windows or `command -v agy` on POSIX, and record `agy --version`.
@@ -55,6 +61,10 @@ After AGY finishes:
 1. Compare repository state with the recorded baseline and identify the actual scoped changes. Do not attribute pre-existing or concurrent user changes to AGY.
 2. Inspect the implementation independently for correctness, regressions, scope drift, missing tests, and unsafe behavior. Do not accept AGY's summary as review evidence.
 3. Run the smallest relevant lint, typecheck, unit, integration, or build checks permitted by the repository. Start focused and expand only when risk warrants it.
+   A successful receipt proves task/output binding, not semantic acceptance. For
+   exact text bytes across platforms, prefer repository-owned EOL policy and
+   verify the immutable committed blob when that is the intended portability
+   boundary.
 4. If the implementation run completed with `SUCCESS` and material findings remain, send concrete findings back to the same conversation:
 
 ```text
