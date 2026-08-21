@@ -25,6 +25,13 @@ Use `kind: "implement"` with a null conversation ID for the first run. Use `kind
 
 After a successful run, the wrapper writes `<task-name>.result.json` beside the task file. The receipt binds the task SHA-256, successful conversation ID, and hashes of all allowed outputs. Re-running an unchanged task with unchanged outputs returns a cached `SUCCESS` without contacting AGY. Changing the task or any allowed output invalidates the receipt and causes a real run.
 
+For `remediate`, the prior successful receipt may authorize existing changes only
+inside `write_paths` when its conversation ID matches the remediation task and its
+recorded output hashes still match the workspace. This is not a cache hit: the
+wrapper contacts the same AGY conversation and replaces the receipt only after a
+successful remediation. A stale receipt, conversation mismatch, output mismatch,
+or dirty path outside `write_paths` still fails baseline validation.
+
 Run the installed wrapper directly, resolving the Codex home directory on the current machine:
 
 ```powershell

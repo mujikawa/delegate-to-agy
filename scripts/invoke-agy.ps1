@@ -258,20 +258,31 @@ try {
     $taskHashBefore = (Get-FileHash -LiteralPath $taskPath -Algorithm SHA256).Hash
 
     $cacheHit = $false
+    $remediationBaselineAllowed = $false
     $cachedConversationId = $null
     if ($receiptExistedBefore) {
         try {
             $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
             $currentWriteStateJson = Get-WriteStateJson -WritePaths $resolvedWrites -WorkspaceRoot $workspaceRoot
-            if ($receipt.schema_version -eq 1 -and $receipt.status -eq 'SUCCESS' -and $receipt.task_sha256 -eq $taskHashBefore -and $receipt.write_state_json -eq $currentWriteStateJson) {
-                $parsedCachedConversation = [guid]::Empty
-                if ([guid]::TryParse([string]$receipt.conversation_id, [ref]$parsedCachedConversation)) {
+            $parsedReceiptConversation = [guid]::Empty
+            $receiptMatchesOutputs = (
+                $receipt.schema_version -eq 1 -and
+                $receipt.status -eq 'SUCCESS' -and
+                [string]$receipt.task_sha256 -match '^[0-9A-Fa-f]{64}$' -and
+                $receipt.write_state_json -eq $currentWriteStateJson -and
+                [guid]::TryParse([string]$receipt.conversation_id, [ref]$parsedReceiptConversation)
+            )
+            if ($receiptMatchesOutputs) {
+                if ($receipt.task_sha256 -eq $taskHashBefore) {
                     $cacheHit = $true
                     $cachedConversationId = [string]$receipt.conversation_id
+                } elseif ($task.kind -eq 'remediate' -and $parsedReceiptConversation -eq $conversationId) {
+                    $remediationBaselineAllowed = $true
                 }
             }
         } catch {
             $cacheHit = $false
+            $remediationBaselineAllowed = $false
         }
     }
 
@@ -280,7 +291,7 @@ try {
         $unexpectedBaseline = @($beforeGit | Where-Object {
             -not $_.Equals($taskRelative, [System.StringComparison]::OrdinalIgnoreCase) -and
             -not ($receiptExistedBefore -and $_.Equals($receiptRelative, [System.StringComparison]::OrdinalIgnoreCase)) -and
-            -not ($cacheHit -and (Test-PathCovered -RelativePath $_ -AllowedRelativePaths $allowedWriteRelative))
+            -not (($cacheHit -or $remediationBaselineAllowed) -and (Test-PathCovered -RelativePath $_ -AllowedRelativePaths $allowedWriteRelative))
         })
         if ($unexpectedBaseline.Count -ne 0) { Stop-Wrapper 'linked worktree must be clean except for its task and matching receipt files' }
     } else {
@@ -327,6 +338,7 @@ Stay inside the canonical workspace root. Never search sibling directories, user
             write_paths = $resolvedWrites
             timeout_seconds = $task.timeout_seconds
             cache_hit = $cacheHit
+            remediation_baseline_allowed = $remediationBaselineAllowed
             agy_flags = @('--mode', 'accept-edits', '--output-format', 'json', '--sandbox')
         } | ConvertTo-Json -Depth 5
         exit 0
