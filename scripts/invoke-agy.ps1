@@ -118,11 +118,13 @@ function Get-GitChangedPaths {
     param([string]$GitPath, [string]$WorkspaceRoot)
 
     $all = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    # A sandbox may create the worktree before the host runs this wrapper. Trust
+    # only the already-derived workspace for these read-only Git inspections.
     foreach ($arguments in @(
-        @('-C', $WorkspaceRoot, 'diff', '--name-only', '-z'),
-        @('-C', $WorkspaceRoot, 'diff', '--cached', '--name-only', '-z'),
-        @('-C', $WorkspaceRoot, 'ls-files', '--others', '--exclude-standard', '-z'),
-        @('-C', $WorkspaceRoot, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z')
+        @('-c', "safe.directory=$WorkspaceRoot", '-C', $WorkspaceRoot, 'diff', '--name-only', '-z'),
+        @('-c', "safe.directory=$WorkspaceRoot", '-C', $WorkspaceRoot, 'diff', '--cached', '--name-only', '-z'),
+        @('-c', "safe.directory=$WorkspaceRoot", '-C', $WorkspaceRoot, 'ls-files', '--others', '--exclude-standard', '-z'),
+        @('-c', "safe.directory=$WorkspaceRoot", '-C', $WorkspaceRoot, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z')
     )) {
         $raw = (& $GitPath @arguments | Out-String)
         if ($LASTEXITCODE -ne 0) {
