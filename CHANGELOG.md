@@ -2,7 +2,22 @@
 
 All notable changes to Delegate to AGY will be documented in this file.
 
-## Unreleased
+## 0.1.1 - 2026-08-24
+
+### Added
+
+- Structured failure receipts with deterministic categories and retryability.
+- Fake-AGY wrapper regression tests for permission denial, transient service
+  failure, cancellation, timeout, invalid output, success receipts, and pinned
+  safe flags.
+
+### Changed
+
+- Fresh retry is now limited to an unchanged `transient_unavailable` outcome;
+  permission denial, cancellation, timeout, invalid output, process failure, and
+  scope drift stop without consuming a retry.
+- Unattended AGY prompts prohibit shell, Git, package-manager, test, and network
+  commands; Codex remains responsible for validation.
 
 ## 0.1.0 - 2026-08-21
 

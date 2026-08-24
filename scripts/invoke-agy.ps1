@@ -16,6 +16,52 @@ function Stop-Wrapper {
     exit $Code
 }
 
+function Get-OptionalProperty {
+    param([object]$Object, [string]$Name)
+    if ($null -eq $Object) { return $null }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
+function Get-AgyFailureClassification {
+    param([object]$Terminal, [int]$ExitCode)
+
+    $status = [string](Get-OptionalProperty -Object $Terminal -Name 'status')
+    $response = [string](Get-OptionalProperty -Object $Terminal -Name 'response')
+    $errorText = [string](Get-OptionalProperty -Object $Terminal -Name 'error')
+    $evidence = "$status`n$response`n$errorText"
+
+    if ($status -match '(?i)CANCEL(?:ED|LED)') {
+        return [pscustomobject]@{ category = 'canceled'; retryable = $false }
+    }
+    if ($status -match '(?i)TIMEOUT' -or $evidence -match '(?i)timed?\s*out') {
+        return [pscustomobject]@{ category = 'timeout'; retryable = $false }
+    }
+    if ($evidence -match '(?i)(\b503\b|UNAVAILABLE|service\s+is\s+currently\s+unavailable|temporar(?:y|ily)|connection\s+(?:reset|closed)|backend\s+restart)') {
+        return [pscustomobject]@{ category = 'transient_unavailable'; retryable = $true }
+    }
+    if ($evidence -match '(?i)(permission|not permitted|not allowed|denied|approval|sandbox)') {
+        return [pscustomobject]@{ category = 'permission_denied'; retryable = $false }
+    }
+    if ($null -eq $Terminal) {
+        return [pscustomobject]@{ category = 'invalid_terminal_output'; retryable = $false }
+    }
+    if ($ExitCode -ne 0) {
+        return [pscustomobject]@{ category = 'process_error'; retryable = $false }
+    }
+    return [pscustomobject]@{ category = 'terminal_error'; retryable = $false }
+}
+
+function Write-JsonAtomic {
+    param([string]$Path, [object]$Value)
+
+    $json = $Value | ConvertTo-Json
+    $temporaryPath = "$Path.tmp-$([guid]::NewGuid().ToString('N'))"
+    [System.IO.File]::WriteAllText($temporaryPath, $json, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::Move($temporaryPath, $Path, $true)
+}
+
 function Test-IsDescendant {
     param([string]$Candidate, [string]$Root)
     $rootPrefix = $Root.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
@@ -259,6 +305,7 @@ try {
 
     $cacheHit = $false
     $remediationBaselineAllowed = $false
+    $receiptIsSuccessfulEvidence = $false
     $cachedConversationId = $null
     if ($receiptExistedBefore) {
         try {
@@ -273,6 +320,7 @@ try {
                 [guid]::TryParse([string]$receipt.conversation_id, [ref]$parsedReceiptConversation)
             )
             if ($receiptMatchesOutputs) {
+                $receiptIsSuccessfulEvidence = $true
                 if ($receipt.task_sha256 -eq $taskHashBefore) {
                     $cacheHit = $true
                     $cachedConversationId = [string]$receipt.conversation_id
@@ -316,7 +364,7 @@ Allowed write paths:
 $($resolvedWrites | ForEach-Object { "- $_" } | Out-String)
 Out-of-scope paths:
 $($resolvedOutOfScope | ForEach-Object { "- $_" } | Out-String)
-Stay inside the canonical workspace root. Never search sibling directories, user-home folders, other drives, guessed paths, secrets, tokens, credentials, or environment-variable values. Do not modify anything outside the allowed write paths. Use the workspace edit or patch tool for workspace files; do not use cortex write_to_file, which is reserved for AGY artifacts. Do not commit, push, install dependencies, perform destructive cleanup, or make unrelated changes. Use only exact paths supplied above. Summarize changed files, validation attempted, and unresolved issues. Return SUCCESS only when the requested implementation or remediation is complete.
+Stay inside the canonical workspace root. Never search sibling directories, user-home folders, other drives, guessed paths, secrets, tokens, credentials, or environment-variable values. Do not invoke shell, Git, package-manager, test, or network commands. Use AGY's workspace-native file reading, listing, search, edit, or patch tools only within the exact allowed paths; Codex will run validation independently. Do not modify anything outside the allowed write paths. Use the workspace edit or patch tool for workspace files; do not use cortex write_to_file, which is reserved for AGY artifacts. Do not commit, push, install dependencies, perform destructive cleanup, or make unrelated changes. Summarize changed files, validation attempted, and unresolved issues. Return SUCCESS only when the requested implementation or remediation is complete.
 "@
 
     $agyCommand = Get-Command agy -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -393,16 +441,46 @@ Stay inside the canonical workspace root. Never search sibling directories, user
         -not (Test-PathCovered -RelativePath $_ -AllowedRelativePaths $allowedWriteRelative)
     })
     if ($scopeDrift.Count -ne 0) {
+        if (-not $receiptIsSuccessfulEvidence) {
+            Write-JsonAtomic -Path $receiptPath -Value ([ordered]@{
+                schema_version = 1
+                status = 'NEEDS_FOLLOWUP'
+                category = 'scope_drift'
+                retryable = $false
+                task_sha256 = $taskHashBefore
+                agy_status = $null
+                agy_exit_code = $agyExitCode
+                changed_paths = $scopeDrift
+                completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+            })
+        }
         Stop-Wrapper ("AGY changed paths outside the allowlist: " + ($scopeDrift -join ', ')) 3
     }
 
-    if ($agyExitCode -ne 0) { exit $agyExitCode }
+    $terminal = $null
     try {
         $terminal = $agyText | ConvertFrom-Json
     } catch {
-        Stop-Wrapper 'AGY did not return valid JSON' 4
+        $terminal = $null
     }
-    if ($terminal.status -ne 'SUCCESS') { Stop-Wrapper "AGY terminal status was $($terminal.status)" 4 }
+    if ($null -eq $terminal -or $agyExitCode -ne 0 -or (Get-OptionalProperty -Object $terminal -Name 'status') -ne 'SUCCESS') {
+        $classification = Get-AgyFailureClassification -Terminal $terminal -ExitCode $agyExitCode
+        $terminalStatus = [string](Get-OptionalProperty -Object $terminal -Name 'status')
+        if (-not $receiptIsSuccessfulEvidence) {
+            Write-JsonAtomic -Path $receiptPath -Value ([ordered]@{
+                schema_version = 1
+                status = 'NEEDS_FOLLOWUP'
+                category = $classification.category
+                retryable = $classification.retryable
+                task_sha256 = $taskHashBefore
+                agy_status = if ([string]::IsNullOrWhiteSpace($terminalStatus)) { $null } else { $terminalStatus }
+                agy_exit_code = $agyExitCode
+                write_state_json = Get-WriteStateJson -WritePaths $resolvedWrites -WorkspaceRoot $workspaceRoot
+                completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+            })
+        }
+        Stop-Wrapper "AGY failed: category=$($classification.category) retryable=$($classification.retryable) terminal_status=$terminalStatus exit_code=$agyExitCode" 4
+    }
 
     $receiptObject = [ordered]@{
         schema_version = 1
@@ -412,10 +490,7 @@ Stay inside the canonical workspace root. Never search sibling directories, user
         conversation_id = [string]$terminal.conversation_id
         completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
     }
-    $receiptJson = $receiptObject | ConvertTo-Json
-    $temporaryReceipt = "$receiptPath.tmp-$([guid]::NewGuid().ToString('N'))"
-    [System.IO.File]::WriteAllText($temporaryReceipt, $receiptJson, [System.Text.UTF8Encoding]::new($false))
-    [System.IO.File]::Move($temporaryReceipt, $receiptPath, $true)
+    Write-JsonAtomic -Path $receiptPath -Value $receiptObject
     exit 0
 } catch {
     Stop-Wrapper $_.Exception.Message
