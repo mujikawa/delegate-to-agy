@@ -25,6 +25,24 @@ Use `kind: "implement"` with a null conversation ID for the first run. Use `kind
 
 After a successful run, the wrapper writes `<task-name>.result.json` beside the task file. The receipt binds the task SHA-256, successful conversation ID, and hashes of all allowed outputs. Re-running an unchanged task with unchanged outputs returns a cached `SUCCESS` without contacting AGY. Changing the task or any allowed output invalidates the receipt and causes a real run.
 
+After a failed run without prior successful remediation evidence, the same receipt
+path contains `status: "NEEDS_FOLLOWUP"`, a failure `category`, `retryable`, the
+task hash, terminal status, process exit code, and allowed-output state. It omits
+the raw conversation ID and error text. A failed receipt is diagnostic evidence,
+never a cache hit or authorization for a dirty baseline, and a later successful
+fresh run may replace it.
+
+Failure categories have fixed retry semantics:
+
+- `transient_unavailable`: retryable once only when the workspace is unchanged;
+- `permission_denied`, `canceled`, `timeout`, `invalid_terminal_output`,
+  `process_error`, `terminal_error`, and `scope_drift`: do not retry the same
+  task automatically.
+
+The wrapper tells AGY not to invoke shell, Git, package-manager, test, or network
+commands. Codex supplies explicit read paths, runs validation independently, and
+must not convert a permission denial into unrestricted execution.
+
 For `remediate`, the prior successful receipt may authorize existing changes only
 inside `write_paths` when its conversation ID matches the remediation task and its
 recorded output hashes still match the workspace. This is not a cache hit: the

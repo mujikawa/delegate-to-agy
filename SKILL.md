@@ -45,12 +45,24 @@ AGY headless execution depends on its cached authenticated profile outside the w
 
 For unattended automation, read [references/automation.md](references/automation.md) and use [scripts/invoke-agy.ps1](scripts/invoke-agy.ps1) instead of invoking `agy` directly. Create `<workspace>/.agy/task.json` using the documented schema, then run the installed wrapper with only `-TaskFile <absolute-task-path>`. The wrapper derives the workspace from the task-file location, validates all paths, pins safe AGY flags, rejects main Git worktrees, and detects post-run scope drift. Git repositories must use a clean linked worktree; non-Git validation workspaces must be isolated directories named `agy-scratch-*`. A persistent Codex rule may allow the installed wrapper path; generate it with [scripts/install-rule.ps1](scripts/install-rule.ps1), but never allow a general `agy`, `agy -p`, `pwsh`, or `pwsh -Command` prefix. Codex rules load after Codex restarts.
 
+The unattended prompt prohibits shell, Git, package-manager, test, and network
+commands inside AGY. Give AGY explicit read paths and let Codex run validation.
+Do not relax this boundary merely because AGY attempted an unapproved discovery
+command.
+
 Require a JSON terminal status of `SUCCESS`. Capture the `conversation_id`, response, stderr notices, and any reported validation. A zero process exit alone is insufficient because permission soft-denials may still leave work incomplete.
 
 If a host-authorized AGY run returns a non-`SUCCESS` terminal status:
 
 - Inspect the workspace before deciding what happened. AGY may have left partial changes even when its response claims otherwise.
-- If there are no changes, retry at most once as a new conversation from the same absolute workspace root with the full original task and path boundaries. Do not resume the failed conversation; backend restarts or lost workspace context can make a resumed agent search unrelated paths.
+- Read the structured failure receipt. Retry only when `retryable` is `true`, the
+  category is `transient_unavailable`, and there are no workspace changes.
+  Permission denial, cancellation, timeout, invalid output, process failure, and
+  scope drift are deterministic stop conditions, not retry opportunities.
+- A permitted retry is at most one new conversation from the same absolute
+  workspace root with the full original task and path boundaries. Do not resume
+  the failed conversation; backend restarts or lost workspace context can make a
+  resumed agent search unrelated paths.
 - If there are changes, do not retry automatically. Review and validate the artifacts, but report that the AGY run itself failed. Independently verified artifacts may still be usable; never relabel the terminal run as successful.
 - Stop after that single fresh retry and report the infrastructure failure if it remains non-`SUCCESS`.
 
@@ -71,11 +83,17 @@ After AGY finishes:
 agy -p "Address these Codex review findings without changing unrelated code: <findings>" --conversation <conversation_id> --mode accept-edits --output-format json --print-timeout <duration-with-unit> --sandbox
 ```
 
-5. If the implementation run did not complete with `SUCCESS`, use a fresh conversation for any authorized corrective implementation instead of resuming the failed conversation.
+5. If the implementation run did not complete with `SUCCESS`, follow its failure
+   receipt. Use a fresh conversation only for an authorized retryable transient
+   failure; otherwise stop or create a newly scoped task after resolving the
+   deterministic cause.
 6. Re-review the new diff and rerun affected checks. Default to at most two AGY remediation passes; after that, report unresolved findings unless the user requested continued iteration.
 
 Stop immediately if AGY changes files outside scope, overwrites user work, requests credentials, or requires new authority. Preserve evidence and ask the user how to proceed.
 
 ## Final report
 
-Report the AGY version and terminal status, conversation ID, files changed, Codex review outcome, validation commands and results, remediation passes, and any unresolved risks. Clearly distinguish AGY's claims from checks Codex actually performed.
+Report the AGY version and terminal status, failure category and retryability when
+applicable, conversation routing status, files changed, Codex review outcome,
+validation commands and results, remediation passes, and unresolved risks. Keep
+raw conversation IDs out of public issues, trackers, and release evidence.

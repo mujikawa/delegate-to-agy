@@ -17,9 +17,10 @@ or Google.
 5. Review findings can be returned to the same AGY conversation for bounded
    remediation.
 
-The unattended wrapper also writes a receipt that binds the successful AGY
-conversation, task hash, and output hashes. An unchanged successful task can
-therefore return a cached result without contacting AGY again.
+The unattended wrapper also writes receipts. Successful receipts bind the AGY
+conversation, task hash, and output hashes; failed receipts classify the failure
+and state whether one fresh retry is allowed without exposing raw routing IDs.
+An unchanged successful task can return a cached result without contacting AGY.
 
 ## Requirements
 
@@ -51,7 +52,7 @@ Restart Codex so it discovers the skill. You can then ask Codex to use
 For a reproducible release installation, ask Codex:
 
 ```text
-Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.0.
+Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.1.
 ```
 
 ## Optional unattended execution
@@ -107,7 +108,8 @@ agents/openai.yaml           Codex UI metadata
 references/automation.md     Unattended task schema and invariants
 scripts/invoke-agy.ps1       Validated AGY invocation wrapper
 scripts/install-rule.ps1     Preview/apply the narrow Codex rule
-tests/fixtures/              Linked-worktree validation fixture
+tests/invoke-agy.tests.ps1   Fake-AGY wrapper regression tests
+tests/fixtures/              Linked-worktree delegation fixture
 ```
 
 ## Validate the skill
@@ -117,6 +119,12 @@ Use the validator bundled with Codex's `skill-creator` skill:
 ```powershell
 python (Join-Path $codexRoot `
     'skills\.system\skill-creator\scripts\quick_validate.py') .
+```
+
+Run the wrapper regression suite without contacting AGY:
+
+```powershell
+pwsh -NoProfile -File tests/invoke-agy.tests.ps1
 ```
 
 `tests/fixtures/linked-worktree` is intentionally checked in with an
