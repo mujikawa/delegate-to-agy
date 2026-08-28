@@ -2,6 +2,26 @@
 
 All notable changes to Delegate to AGY will be documented in this file.
 
+## 0.1.2 - 2026-08-29
+
+### Changed
+
+- Remediation guidance now separates the default two-pass budget from an explicitly
+  selected economics-based hard cap, including higher caps such as 10.
+- Every loop now requires new convergence evidence and stops early for repeated
+  no-progress, deterministic failure, scope or authority drift, or an unsupported
+  operation.
+- AGY can hand off partial, reviewed work to Codex before the cap is exhausted;
+  the handoff preserves baseline, diff, receipt, validation, and the remaining gap.
+- Successful receipts remain available through immutable candidate acceptance,
+  and unattended guidance now declares runtime-artifact ownership and cleanup.
+
+### Added
+
+- Safe receipt attempt history with AGY conversation-cumulative token usage,
+  per-invocation token, turn, and duration deltas, terminal status, and failure
+  category. Cache hits and pre-process rejections do not create usage attempts.
+
 ## 0.1.1 - 2026-08-24
 
 ### Added

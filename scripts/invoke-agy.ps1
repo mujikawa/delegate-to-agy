@@ -56,10 +56,108 @@ function Get-AgyFailureClassification {
 function Write-JsonAtomic {
     param([string]$Path, [object]$Value)
 
-    $json = $Value | ConvertTo-Json
+    $json = $Value | ConvertTo-Json -Depth 8
     $temporaryPath = "$Path.tmp-$([guid]::NewGuid().ToString('N'))"
     [System.IO.File]::WriteAllText($temporaryPath, $json, [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::Move($temporaryPath, $Path, $true)
+}
+
+function Get-AgyUsage {
+    param([object]$Terminal)
+
+    $usage = Get-OptionalProperty -Object $Terminal -Name 'usage'
+    if ($null -eq $usage) { return $null }
+
+    return [ordered]@{
+        input_tokens = Get-OptionalProperty -Object $usage -Name 'input_tokens'
+        output_tokens = Get-OptionalProperty -Object $usage -Name 'output_tokens'
+        thinking_tokens = Get-OptionalProperty -Object $usage -Name 'thinking_tokens'
+        cache_read_tokens = Get-OptionalProperty -Object $usage -Name 'cache_read_tokens'
+        total_tokens = Get-OptionalProperty -Object $usage -Name 'total_tokens'
+    }
+}
+
+function Get-NumericDelta {
+    param([object]$Current, [object]$Previous)
+
+    if ($null -eq $Current -or $null -eq $Previous) { return $null }
+    $currentNumber = 0.0
+    $previousNumber = 0.0
+    if (-not [double]::TryParse([string]$Current, [ref]$currentNumber) -or
+        -not [double]::TryParse([string]$Previous, [ref]$previousNumber) -or
+        $currentNumber -lt $previousNumber) {
+        return $null
+    }
+    return $currentNumber - $previousNumber
+}
+
+function Get-UsageDelta {
+    param([object]$Current, [object]$Previous, [bool]$FreshConversation)
+
+    if ($null -eq $Current) { return $null }
+    if ($FreshConversation) { return $Current }
+    if ($null -eq $Previous) { return $null }
+
+    return [ordered]@{
+        input_tokens = Get-NumericDelta -Current $Current.input_tokens -Previous $Previous.input_tokens
+        output_tokens = Get-NumericDelta -Current $Current.output_tokens -Previous $Previous.output_tokens
+        thinking_tokens = Get-NumericDelta -Current $Current.thinking_tokens -Previous $Previous.thinking_tokens
+        cache_read_tokens = Get-NumericDelta -Current $Current.cache_read_tokens -Previous $Previous.cache_read_tokens
+        total_tokens = Get-NumericDelta -Current $Current.total_tokens -Previous $Previous.total_tokens
+    }
+}
+
+function Get-ReceiptAttempts {
+    param([object]$Receipt)
+
+    $attempts = Get-OptionalProperty -Object $Receipt -Name 'attempts'
+    if ($null -eq $attempts) { return @() }
+    return @($attempts)
+}
+
+function New-AgyAttempt {
+    param(
+        [object]$Terminal,
+        [int]$ExitCode,
+        [string]$Kind,
+        [int]$Sequence,
+        [object]$PreviousAttempt,
+        [object]$Category
+    )
+
+    $usageCumulative = Get-AgyUsage -Terminal $Terminal
+    $previousUsage = if ($null -ne $PreviousAttempt) { Get-OptionalProperty -Object $PreviousAttempt -Name 'usage_cumulative' } else { $null }
+    $freshConversation = $Kind -eq 'implement'
+    $turnsCumulative = Get-OptionalProperty -Object $Terminal -Name 'num_turns'
+    $durationCumulative = Get-OptionalProperty -Object $Terminal -Name 'duration_seconds'
+    $previousTurns = if ($null -ne $PreviousAttempt) { Get-OptionalProperty -Object $PreviousAttempt -Name 'num_turns_cumulative' } else { $null }
+    $previousDuration = if ($null -ne $PreviousAttempt) { Get-OptionalProperty -Object $PreviousAttempt -Name 'duration_seconds_cumulative' } else { $null }
+
+    return [ordered]@{
+        sequence = $Sequence
+        kind = $Kind
+        agy_status = Get-OptionalProperty -Object $Terminal -Name 'status'
+        agy_exit_code = $ExitCode
+        category = $Category
+        usage_scope = 'conversation_cumulative'
+        usage_cumulative = $usageCumulative
+        usage_delta = Get-UsageDelta -Current $usageCumulative -Previous $previousUsage -FreshConversation $freshConversation
+        num_turns_cumulative = $turnsCumulative
+        num_turns_delta = if ($freshConversation) { $turnsCumulative } else { Get-NumericDelta -Current $turnsCumulative -Previous $previousTurns }
+        duration_seconds_cumulative = $durationCumulative
+        duration_seconds_delta = if ($freshConversation) { $durationCumulative } else { Get-NumericDelta -Current $durationCumulative -Previous $previousDuration }
+        completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
+    }
+}
+
+function Set-ReceiptAttempts {
+    param([object]$Receipt, [object[]]$Attempts)
+
+    if ($Receipt.PSObject.Properties.Name -contains 'attempts') {
+        $Receipt.attempts = $Attempts
+    } else {
+        $Receipt | Add-Member -NotePropertyName attempts -NotePropertyValue $Attempts
+    }
 }
 
 function Test-IsDescendant {
@@ -307,6 +405,7 @@ try {
     $remediationBaselineAllowed = $false
     $receiptIsSuccessfulEvidence = $false
     $cachedConversationId = $null
+    $receipt = $null
     if ($receiptExistedBefore) {
         try {
             $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
@@ -413,6 +512,15 @@ Stay inside the canonical workspace root. Never search sibling directories, user
     $agyText = $agyOutput -join [Environment]::NewLine
     [Console]::Out.WriteLine($agyText)
 
+    $terminal = $null
+    try {
+        $terminal = $agyText | ConvertFrom-Json
+    } catch {
+        $terminal = $null
+    }
+    $attempts = @(Get-ReceiptAttempts -Receipt $receipt)
+    $previousAttempt = if ($attempts.Count -gt 0) { $attempts[-1] } else { $null }
+
     if ($task.workspace_mode -eq 'linked-worktree') {
         $afterPaths = @(Get-GitChangedPaths -GitPath $gitPath -WorkspaceRoot $workspaceRoot)
     } else {
@@ -441,7 +549,11 @@ Stay inside the canonical workspace root. Never search sibling directories, user
         -not (Test-PathCovered -RelativePath $_ -AllowedRelativePaths $allowedWriteRelative)
     })
     if ($scopeDrift.Count -ne 0) {
-        if (-not $receiptIsSuccessfulEvidence) {
+        $attempts += New-AgyAttempt -Terminal $terminal -ExitCode $agyExitCode -Kind $task.kind -Sequence ($attempts.Count + 1) -PreviousAttempt $previousAttempt -Category 'scope_drift'
+        if ($receiptIsSuccessfulEvidence) {
+            Set-ReceiptAttempts -Receipt $receipt -Attempts $attempts
+            Write-JsonAtomic -Path $receiptPath -Value $receipt
+        } else {
             Write-JsonAtomic -Path $receiptPath -Value ([ordered]@{
                 schema_version = 1
                 status = 'NEEDS_FOLLOWUP'
@@ -451,22 +563,21 @@ Stay inside the canonical workspace root. Never search sibling directories, user
                 agy_status = $null
                 agy_exit_code = $agyExitCode
                 changed_paths = $scopeDrift
+                attempts = $attempts
                 completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
             })
         }
         Stop-Wrapper ("AGY changed paths outside the allowlist: " + ($scopeDrift -join ', ')) 3
     }
 
-    $terminal = $null
-    try {
-        $terminal = $agyText | ConvertFrom-Json
-    } catch {
-        $terminal = $null
-    }
     if ($null -eq $terminal -or $agyExitCode -ne 0 -or (Get-OptionalProperty -Object $terminal -Name 'status') -ne 'SUCCESS') {
         $classification = Get-AgyFailureClassification -Terminal $terminal -ExitCode $agyExitCode
         $terminalStatus = [string](Get-OptionalProperty -Object $terminal -Name 'status')
-        if (-not $receiptIsSuccessfulEvidence) {
+        $attempts += New-AgyAttempt -Terminal $terminal -ExitCode $agyExitCode -Kind $task.kind -Sequence ($attempts.Count + 1) -PreviousAttempt $previousAttempt -Category $classification.category
+        if ($receiptIsSuccessfulEvidence) {
+            Set-ReceiptAttempts -Receipt $receipt -Attempts $attempts
+            Write-JsonAtomic -Path $receiptPath -Value $receipt
+        } else {
             Write-JsonAtomic -Path $receiptPath -Value ([ordered]@{
                 schema_version = 1
                 status = 'NEEDS_FOLLOWUP'
@@ -476,18 +587,21 @@ Stay inside the canonical workspace root. Never search sibling directories, user
                 agy_status = if ([string]::IsNullOrWhiteSpace($terminalStatus)) { $null } else { $terminalStatus }
                 agy_exit_code = $agyExitCode
                 write_state_json = Get-WriteStateJson -WritePaths $resolvedWrites -WorkspaceRoot $workspaceRoot
+                attempts = $attempts
                 completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
             })
         }
         Stop-Wrapper "AGY failed: category=$($classification.category) retryable=$($classification.retryable) terminal_status=$terminalStatus exit_code=$agyExitCode" 4
     }
 
+    $attempts += New-AgyAttempt -Terminal $terminal -ExitCode $agyExitCode -Kind $task.kind -Sequence ($attempts.Count + 1) -PreviousAttempt $previousAttempt -Category $null
     $receiptObject = [ordered]@{
         schema_version = 1
         status = 'SUCCESS'
         task_sha256 = $taskHashBefore
         write_state_json = Get-WriteStateJson -WritePaths $resolvedWrites -WorkspaceRoot $workspaceRoot
         conversation_id = [string]$terminal.conversation_id
+        attempts = $attempts
         completed_at_utc = [DateTimeOffset]::UtcNow.ToString('o')
     }
     Write-JsonAtomic -Path $receiptPath -Value $receiptObject
