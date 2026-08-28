@@ -18,6 +18,16 @@ public static class Program {
         return (value ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
     }
 
+    private static long EnvLong(string name, long fallback) {
+        long value;
+        return long.TryParse(Environment.GetEnvironmentVariable(name), out value) ? value : fallback;
+    }
+
+    private static double EnvDouble(string name, double fallback) {
+        double value;
+        return double.TryParse(Environment.GetEnvironmentVariable(name), out value) ? value : fallback;
+    }
+
     public static int Main(string[] args) {
         var argvFile = Environment.GetEnvironmentVariable("FAKE_AGY_ARGV_FILE");
         if (!string.IsNullOrEmpty(argvFile)) {
@@ -30,7 +40,7 @@ public static class Program {
         var error = Environment.GetEnvironmentVariable("FAKE_AGY_ERROR") ?? "";
         var raw = Environment.GetEnvironmentVariable("FAKE_AGY_RAW");
         if (!string.IsNullOrEmpty(raw)) Console.WriteLine(raw);
-        else Console.WriteLine("{\"status\":\"" + Json(status) + "\",\"response\":\"" + Json(response) + "\",\"error\":\"" + Json(error) + "\",\"conversation_id\":\"00000000-0000-4000-8000-000000000001\",\"duration_seconds\":0,\"num_turns\":1}");
+        else Console.WriteLine("{\"status\":\"" + Json(status) + "\",\"response\":\"" + Json(response) + "\",\"error\":\"" + Json(error) + "\",\"conversation_id\":\"00000000-0000-4000-8000-000000000001\",\"duration_seconds\":" + EnvDouble("FAKE_AGY_DURATION", 2) + ",\"num_turns\":" + EnvLong("FAKE_AGY_TURNS", 1) + ",\"usage\":{\"input_tokens\":" + EnvLong("FAKE_AGY_INPUT", 100) + ",\"output_tokens\":" + EnvLong("FAKE_AGY_OUTPUT", 10) + ",\"thinking_tokens\":" + EnvLong("FAKE_AGY_THINKING", 5) + ",\"cache_read_tokens\":" + EnvLong("FAKE_AGY_CACHE_READ", 50) + ",\"total_tokens\":" + EnvLong("FAKE_AGY_TOTAL", 110) + "}}");
         int code;
         return int.TryParse(Environment.GetEnvironmentVariable("FAKE_AGY_EXIT"), out code) ? code : 0;
     }
@@ -98,6 +108,13 @@ function Invoke-FakeCase {
         $env:FAKE_AGY_EXIT = [string]$FakeExit
         $env:FAKE_AGY_RAW = $RawOutput
         $env:FAKE_AGY_ARGV_FILE = $argvFile
+        $env:FAKE_AGY_INPUT = '100'
+        $env:FAKE_AGY_OUTPUT = '10'
+        $env:FAKE_AGY_THINKING = '5'
+        $env:FAKE_AGY_CACHE_READ = '50'
+        $env:FAKE_AGY_TOTAL = '110'
+        $env:FAKE_AGY_TURNS = '1'
+        $env:FAKE_AGY_DURATION = '2'
         $output = @(& pwsh -NoProfile -File $wrapper -TaskFile $taskFile 2>&1)
         $exitCode = $LASTEXITCODE
         $receipt = Get-Content -LiteralPath (Join-Path $workspace '.agy\task.result.json') -Raw | ConvertFrom-Json
@@ -107,9 +124,85 @@ function Invoke-FakeCase {
         return [pscustomobject]@{ ExitCode = $exitCode; Receipt = $receipt; Argv = @($argv); Output = $output }
     } finally {
         $env:PATH = $originalPath
-        Remove-Item Env:FAKE_AGY_STATUS, Env:FAKE_AGY_ERROR, Env:FAKE_AGY_RESPONSE, Env:FAKE_AGY_EXIT, Env:FAKE_AGY_RAW, Env:FAKE_AGY_ARGV_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:FAKE_AGY_STATUS, Env:FAKE_AGY_ERROR, Env:FAKE_AGY_RESPONSE, Env:FAKE_AGY_EXIT, Env:FAKE_AGY_RAW, Env:FAKE_AGY_ARGV_FILE, Env:FAKE_AGY_INPUT, Env:FAKE_AGY_OUTPUT, Env:FAKE_AGY_THINKING, Env:FAKE_AGY_CACHE_READ, Env:FAKE_AGY_TOTAL, Env:FAKE_AGY_TURNS, Env:FAKE_AGY_DURATION -ErrorAction SilentlyContinue
         Remove-TestDirectory -Path $workspace -RequiredNamePrefix 'agy-scratch-'
         if (Test-Path -LiteralPath $argvFile) { Remove-Item -LiteralPath $argvFile -Force }
+    }
+}
+
+function Invoke-FakeUsageSequence {
+    $caseId = [guid]::NewGuid().ToString('N')
+    $workspace = Join-Path $testTempRoot "agy-scratch-$caseId"
+    $taskDirectory = Join-Path $workspace '.agy'
+    $taskFile = Join-Path $taskDirectory 'task.json'
+    $receiptFile = Join-Path $taskDirectory 'task.result.json'
+    New-Item -ItemType Directory -Path $taskDirectory | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $workspace 'input.txt'), 'input')
+    $task = [ordered]@{
+        schema_version = 1
+        workspace_mode = 'scratch'
+        kind = 'implement'
+        objective = 'Record implementation usage.'
+        acceptance_criteria = @('Usage is recorded.')
+        read_paths = @('input.txt')
+        write_paths = @('output.txt')
+        out_of_scope = @()
+        timeout_seconds = 30
+        conversation_id = $null
+    }
+
+    try {
+        $env:PATH = "$fakeBin;$originalPath"
+        $env:FAKE_AGY_STATUS = 'SUCCESS'
+        $env:FAKE_AGY_RESPONSE = 'done'
+        $env:FAKE_AGY_ERROR = ''
+        $env:FAKE_AGY_EXIT = '0'
+        $env:FAKE_AGY_INPUT = '100'
+        $env:FAKE_AGY_OUTPUT = '10'
+        $env:FAKE_AGY_THINKING = '5'
+        $env:FAKE_AGY_CACHE_READ = '50'
+        $env:FAKE_AGY_TOTAL = '110'
+        $env:FAKE_AGY_TURNS = '1'
+        $env:FAKE_AGY_DURATION = '2'
+        [System.IO.File]::WriteAllText($taskFile, ($task | ConvertTo-Json))
+        & pwsh -NoProfile -File $wrapper -TaskFile $taskFile | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Initial usage fixture failed.' }
+
+        $task.kind = 'remediate'
+        $task.objective = 'Record remediation usage.'
+        $task.conversation_id = '00000000-0000-4000-8000-000000000001'
+        [System.IO.File]::WriteAllText($taskFile, ($task | ConvertTo-Json))
+        $env:FAKE_AGY_INPUT = '160'
+        $env:FAKE_AGY_OUTPUT = '20'
+        $env:FAKE_AGY_THINKING = '8'
+        $env:FAKE_AGY_CACHE_READ = '80'
+        $env:FAKE_AGY_TOTAL = '180'
+        $env:FAKE_AGY_TURNS = '2'
+        $env:FAKE_AGY_DURATION = '3.5'
+        & pwsh -NoProfile -File $wrapper -TaskFile $taskFile | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Remediation usage fixture failed.' }
+
+        $task.objective = 'Record failed remediation usage.'
+        [System.IO.File]::WriteAllText($taskFile, ($task | ConvertTo-Json))
+        $env:FAKE_AGY_STATUS = 'ERROR'
+        $env:FAKE_AGY_RESPONSE = ''
+        $env:FAKE_AGY_ERROR = 'permission denied by sandbox'
+        $env:FAKE_AGY_EXIT = '1'
+        $env:FAKE_AGY_INPUT = '170'
+        $env:FAKE_AGY_OUTPUT = '22'
+        $env:FAKE_AGY_THINKING = '9'
+        $env:FAKE_AGY_CACHE_READ = '85'
+        $env:FAKE_AGY_TOTAL = '192'
+        $env:FAKE_AGY_TURNS = '3'
+        $env:FAKE_AGY_DURATION = '4'
+        & pwsh -NoProfile -File $wrapper -TaskFile $taskFile 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 4) { throw 'Failed remediation usage fixture returned an unexpected exit code.' }
+
+        return Get-Content -LiteralPath $receiptFile -Raw | ConvertFrom-Json
+    } finally {
+        $env:PATH = $originalPath
+        Remove-Item Env:FAKE_AGY_STATUS, Env:FAKE_AGY_RESPONSE, Env:FAKE_AGY_ERROR, Env:FAKE_AGY_EXIT, Env:FAKE_AGY_INPUT, Env:FAKE_AGY_OUTPUT, Env:FAKE_AGY_THINKING, Env:FAKE_AGY_CACHE_READ, Env:FAKE_AGY_TOTAL, Env:FAKE_AGY_TURNS, Env:FAKE_AGY_DURATION -ErrorAction SilentlyContinue
+        Remove-TestDirectory -Path $workspace -RequiredNamePrefix 'agy-scratch-'
     }
 }
 
@@ -118,6 +211,8 @@ try {
     Assert-Equal $permission.ExitCode 4 'Permission denial wrapper exit code'
     Assert-Equal $permission.Receipt.category 'permission_denied' 'Permission denial category'
     Assert-Equal $permission.Receipt.retryable $false 'Permission denial retryability'
+    Assert-Equal $permission.Receipt.attempts.Count 1 'Permission denial attempt count'
+    Assert-Equal $permission.Receipt.attempts[0].usage_delta.total_tokens 110 'Permission denial loop token usage'
     Assert-True ($permission.Receipt.PSObject.Properties.Name -notcontains 'conversation_id') 'Failure receipts must omit raw conversation IDs.'
     Assert-True ($permission.Receipt.PSObject.Properties.Name -notcontains 'error') 'Failure receipts must omit raw AGY error text.'
 
@@ -140,10 +235,26 @@ try {
     $success = Invoke-FakeCase -Name 'success' -Status 'SUCCESS' -ErrorText '' -FakeExit 0
     Assert-Equal $success.ExitCode 0 'Success wrapper exit code'
     Assert-Equal $success.Receipt.status 'SUCCESS' 'Success receipt status'
+    Assert-Equal $success.Receipt.attempts.Count 1 'Success attempt count'
+    Assert-Equal $success.Receipt.attempts[0].usage_cumulative.input_tokens 100 'Success cumulative input tokens'
+    Assert-Equal $success.Receipt.attempts[0].usage_delta.input_tokens 100 'Fresh success loop input tokens'
+    Assert-Equal $success.Receipt.attempts[0].num_turns_delta 1 'Fresh success turn delta'
     Assert-True ($success.Argv -contains '--sandbox') 'The wrapper must retain AGY sandbox mode.'
     Assert-True ($success.Argv -notcontains '--dangerously-skip-permissions') 'The wrapper must not skip AGY permissions.'
     $promptIndex = [Array]::IndexOf($success.Argv, '-p') + 1
     Assert-True ($promptIndex -gt 0 -and $success.Argv[$promptIndex] -match 'Do not invoke shell, Git') 'The prompt must prohibit shell and Git commands.'
+
+    $usageSequence = Invoke-FakeUsageSequence
+    Assert-Equal $usageSequence.status 'SUCCESS' 'Failed remediation must preserve successful output binding'
+    Assert-Equal $usageSequence.attempts.Count 3 'Usage sequence attempt count'
+    Assert-Equal $usageSequence.attempts[1].usage_cumulative.total_tokens 180 'Remediation cumulative total tokens'
+    Assert-Equal $usageSequence.attempts[1].usage_delta.input_tokens 60 'Remediation input token delta'
+    Assert-Equal $usageSequence.attempts[1].usage_delta.total_tokens 70 'Remediation total token delta'
+    Assert-Equal $usageSequence.attempts[1].num_turns_delta 1 'Remediation turn delta'
+    Assert-Equal $usageSequence.attempts[1].duration_seconds_delta 1.5 'Remediation duration delta'
+    Assert-Equal $usageSequence.attempts[2].agy_status 'ERROR' 'Failed remediation terminal status'
+    Assert-Equal $usageSequence.attempts[2].category 'permission_denied' 'Failed remediation category'
+    Assert-Equal $usageSequence.attempts[2].usage_delta.total_tokens 12 'Failed remediation total token delta'
 
     Write-Output 'invoke-agy wrapper tests passed'
 } finally {

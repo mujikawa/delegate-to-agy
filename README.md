@@ -17,10 +17,20 @@ or Google.
 5. Review findings can be returned to the same AGY conversation for bounded
    remediation.
 
+The remediation budget has two controls: an economic hard cap and a convergence
+checkpoint after every loop. The default remains two remediation passes when no
+budget is declared, while a user may deliberately select a higher cap such as 10
+when AGY is the lower-cost executor. The cap is not a target. AGY should stop and
+hand off evidence to Codex as soon as it cannot complete the remaining operation
+with its permitted tools.
+
 The unattended wrapper also writes receipts. Successful receipts bind the AGY
 conversation, task hash, and output hashes; failed receipts classify the failure
 and state whether one fresh retry is allowed without exposing raw routing IDs.
-An unchanged successful task can return a cached result without contacting AGY.
+Each real invocation that leaves wrapper control files intact also appends
+conversation-cumulative usage and a normalized per-invocation token delta. An
+unchanged successful task can return a cached result without contacting AGY and
+therefore does not add a usage attempt.
 
 ## Requirements
 
@@ -52,7 +62,7 @@ Restart Codex so it discovers the skill. You can then ask Codex to use
 For a reproducible release installation, ask Codex:
 
 ```text
-Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.1.
+Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.2.
 ```
 
 ## Optional unattended execution
@@ -97,13 +107,17 @@ requirements, read [Unattended automation](references/automation.md).
   reviewing the actual changes and running verification.
 - Receipts prove task/output binding, not semantic correctness. Portable exact
   text should use repository-owned EOL policy and immutable-blob verification.
+- Successful receipts remain private but are retained through immutable candidate
+  verification so later findings can use receipt-bound remediation.
+- Capability handoff preserves the current diff and evidence for Codex; it does
+  not widen scope or convert a failed AGY terminal status into success.
 
 ## Repository layout
 
 ```text
 SKILL.md                     Skill entrypoint and review workflow
 CHANGELOG.md                  Version history
-RELEASE-v0.1.0.md             First tagged-release notes
+RELEASE-v0.1.2.md             Latest tagged-release notes
 agents/openai.yaml           Codex UI metadata
 references/automation.md     Unattended task schema and invariants
 scripts/invoke-agy.ps1       Validated AGY invocation wrapper

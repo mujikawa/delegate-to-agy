@@ -87,7 +87,22 @@ agy -p "Address these Codex review findings without changing unrelated code: <fi
    receipt. Use a fresh conversation only for an authorized retryable transient
    failure; otherwise stop or create a newly scoped task after resolving the
    deterministic cause.
-6. Re-review the new diff and rerun affected checks. Default to at most two AGY remediation passes; after that, report unresolved findings unless the user requested continued iteration.
+6. Re-review the new diff and rerun affected checks. When no loop budget was
+   declared, default to at most two AGY remediation passes. If the user or owning
+   coordinator explicitly selected a higher economics-based hard cap, such as 10,
+   honor that ceiling. It is not a target: each pass must address a new concrete
+   finding or produce changed verification evidence. Stop early on repeated
+   no-progress failure, no net diff, deterministic infrastructure failure, scope
+   drift, new authority, or an operation AGY cannot perform with its permitted
+   tools.
+
+When AGY reports that the remaining work is outside its capability or permitted
+tool boundary, stop before the hard cap and hand the task back to Codex. Preserve
+the baseline, actual diff, completed acceptance criteria, remaining gap, failed or
+unavailable operation, validation evidence, receipt, conversation routing, and the
+smallest next action. Codex may finish only the already authorized scope and must
+independently review the combined result. Do not describe a valid capability
+handoff as an exhausted retry or synthesize AGY `SUCCESS`.
 
 Stop immediately if AGY changes files outside scope, overwrites user work, requests credentials, or requires new authority. Preserve evidence and ask the user how to proceed.
 
@@ -95,5 +110,8 @@ Stop immediately if AGY changes files outside scope, overwrites user work, reque
 
 Report the AGY version and terminal status, failure category and retryability when
 applicable, conversation routing status, files changed, Codex review outcome,
-validation commands and results, remediation passes, and unresolved risks. Keep
-raw conversation IDs out of public issues, trackers, and release evidence.
+validation commands and results, remediation passes, capability handoff when one
+occurred, per-invocation usage deltas from the receipt, and unresolved risks.
+Distinguish AGY's conversation-cumulative counters from each invocation delta;
+report unavailable fields as unavailable. Keep raw conversation IDs out of public
+issues, trackers, and release evidence.

@@ -25,12 +25,44 @@ Use `kind: "implement"` with a null conversation ID for the first run. Use `kind
 
 After a successful run, the wrapper writes `<task-name>.result.json` beside the task file. The receipt binds the task SHA-256, successful conversation ID, and hashes of all allowed outputs. Re-running an unchanged task with unchanged outputs returns a cached `SUCCESS` without contacting AGY. Changing the task or any allowed output invalidates the receipt and causes a real run.
 
+Every real AGY invocation that leaves the wrapper-controlled task and receipt
+intact appends an `attempts` entry. Each entry records the implementation or
+remediation kind, AGY terminal status, exit code, failure category when applicable,
+completion time, and:
+
+- `usage_cumulative`: AGY's conversation-cumulative input, output, thinking,
+  cache-read, and total token counters;
+- `usage_delta`: tokens attributable to this invocation, calculated from the prior
+  attempt in the same conversation;
+- cumulative and per-invocation deltas for `num_turns` and `duration_seconds`.
+
+For a fresh implementation conversation, cumulative usage is also its invocation
+delta. For remediation, AGY reports conversation-cumulative counters, so the
+wrapper subtracts the prior recorded cumulative values. When an older receipt or
+invalid terminal output lacks a required counter, the corresponding delta remains
+`null`; it is never estimated. A cache hit and a rejection before AGY starts append
+no attempt because no AGY invocation occurred.
+
+If AGY tampers with the task or pre-existing receipt, the wrapper stops without
+rewriting that evidence; the raw terminal output remains the only usage source for
+that exceptional invocation.
+
+Retain the successful receipt and task file through independent Codex review, the
+immutable candidate, and the frozen candidate gate. Removing them immediately
+after focused checks can prevent receipt-bound remediation for a later finding.
+Keep both private and outside the accepted commit; remove them only at the declared
+worktree cleanup point.
+
 After a failed run without prior successful remediation evidence, the same receipt
 path contains `status: "NEEDS_FOLLOWUP"`, a failure `category`, `retryable`, the
 task hash, terminal status, process exit code, and allowed-output state. It omits
 the raw conversation ID and error text. A failed receipt is diagnostic evidence,
 never a cache hit or authorization for a dirty baseline, and a later successful
 fresh run may replace it.
+
+When a failed remediation follows a successful receipt, the wrapper preserves the
+successful task/output binding and appends the failed attempt telemetry to it. A
+failed invocation never becomes successful merely because its usage was recorded.
 
 Failure categories have fixed retry semantics:
 
@@ -76,5 +108,23 @@ output satisfies a semantic or cross-platform byte contract. For portable exact
 text, define repository-owned EOL policy (for example `.gitattributes`) and verify
 the immutable committed blob; use raw worktree bytes only when host-specific
 materialization is intentionally part of acceptance.
+
+## Runtime artifacts and capability handoff
+
+Before delegation, declare ownership and lifecycle actions for environments,
+dependency trees, caches, generated outputs, and test artifacts. Prefer invoking
+AGY before creating large ignored runtime trees when practical. If runtime
+artifacts are required, preflight the validation command and record whether Codex
+may create, reuse, or remove them. Do not delete or rebuild an environment merely
+to satisfy wrapper cleanliness. Use an exact cleanup envelope only when the user
+authorized it and path and reparse-point checks pass.
+
+If AGY cannot complete a structural operation with its permitted tools—for
+example, deleting a tracked file—stop the AGY loop instead of producing empty
+placeholders or repeating the same attempt. Return a capability handoff containing
+the baseline, actual diff, completed criteria, remaining gap, unavailable
+operation, validation evidence, receipt and private routing location, and one next
+Codex action. The economic loop cap remains a ceiling; capability handoff can occur
+at any earlier loop.
 
 The companion Codex rule allows only the installed wrapper executable path. Preview it with `scripts/install-rule.ps1`; install it only with `scripts/install-rule.ps1 -Apply`. Because subsequent arguments are allowed by a prefix rule, the wrapper must remain outside AGY's writable workspace and must continue rejecting unknown parameters and unsafe task content. After installing or changing a rule, restart Codex and verify it with `codex execpolicy check`.
