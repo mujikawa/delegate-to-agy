@@ -130,6 +130,20 @@ execution into the coordinator. Create a replacement only after the user
 explicitly authorizes the replacement topology and its directly inherited AGY
 scope. A rejection before process creation is not an AGY invocation.
 
+Before creating the worker, record a disclosure authorization packet containing:
+
+- the trusted user turn or policy boundary;
+- canonical private repository identity;
+- exact read paths or content classes and write paths;
+- explicit exclusions; and
+- the selected inherited-context slice.
+
+Verify that the slice actually contains the authorization-bearing user input.
+The task file and coordinator packet constrain scope but do not independently
+prove user authorization. If the host blocks disclosure before process creation,
+record the pre-process decision, `invocations: 0`, and the Codex handoff; do not
+create a receipt attempt or reuse the same relay as a retry.
+
 Receipts bind the task and actual allowed outputs. They do not prove that an
 output satisfies a semantic or cross-platform byte contract. For portable exact
 text, define repository-owned EOL policy (for example `.gitattributes`) and verify
@@ -153,5 +167,11 @@ the baseline, actual diff, completed criteria, remaining gap, unavailable
 operation, validation evidence, receipt and private routing location, and one next
 Codex action. The economic loop cap remains a ceiling; capability handoff can occur
 at any earlier loop.
+
+Record one handoff category: `runtime_materialized`, `runtime_only_finding`,
+`unsupported_operation`, `external_disclosure_denied`, `new_authority_required`,
+or another concise evidence-backed value. Keep validation-only runs, cache hits,
+pre-process decisions, real AGY invocations, AGY remediation loops, and Codex
+handoffs as separate counters.
 
 The companion Codex rule allows only the installed wrapper executable path. Preview it with `scripts/install-rule.ps1`; install it only with `scripts/install-rule.ps1 -Apply`. Because subsequent arguments are allowed by a prefix rule, the wrapper must remain outside AGY's writable workspace and must continue rejecting unknown parameters and unsafe task content. After installing or changing a rule, restart Codex and verify it with `codex execpolicy check`.

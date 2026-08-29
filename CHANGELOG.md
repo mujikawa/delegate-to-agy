@@ -2,6 +2,25 @@
 
 All notable changes to Delegate to AGY will be documented in this file.
 
+## 0.1.4 - 2026-08-30
+
+### Added
+
+- A private-source disclosure authorization packet that records the trusted user
+  turn, canonical repository, permitted path classes, write paths, exclusions,
+  and inherited-context selection.
+- Evidence-backed capability-handoff categories for runtime, unsupported-operation,
+  disclosure, and new-authority boundaries.
+
+### Changed
+
+- A fixed inherited-turn count no longer serves as proof that an invoking worker
+  can show trusted external-delegation authorization.
+- Pre-process approval decisions, validation-only runs, cache hits, real AGY
+  invocations, remediation loops, and Codex handoffs are reported separately.
+- A disclosure rejection before process creation is recorded as zero AGY
+  invocations rather than executor failure or a consumed loop.
+
 ## 0.1.3 - 2026-08-29
 
 ### Changed
