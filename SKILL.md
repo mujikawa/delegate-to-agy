@@ -29,6 +29,8 @@ Build an outcome-focused prompt that includes:
 - the canonical absolute workspace root and the canonical absolute paths AGY may read or write;
 - an instruction to stay inside that root and never search sibling directories, user-home folders, other drives, or guessed paths;
 - allowed files or directories and explicit out-of-scope areas;
+- the expected final output shape, including required files, directories, and
+  objective-specific structural or value invariants;
 - relevant repository instructions and existing user changes that must be preserved;
 - a prohibition on commits, pushes, destructive cleanup, unrelated refactors, and secret access;
 - a request to summarize changed files, validation attempted, and unresolved issues.
@@ -44,6 +46,14 @@ Do not use `--dangerously-skip-permissions` unless the user explicitly authorize
 AGY headless execution depends on its cached authenticated profile outside the workspace and on Google network access. In the current Codex environment these are known to be unavailable inside the normal workspace sandbox, so do not perform a sandbox-first AGY attempt. Request narrowly scoped host approval for each exact AGY implementation or remediation invocation and run it once with AGY's own `--sandbox` still enabled. Do not request broad Codex filesystem/network access, approve arbitrary `agy -p` prompts, or interpret a denied host approval as failed AGY authentication.
 
 For unattended automation, read [references/automation.md](references/automation.md) and use [scripts/invoke-agy.ps1](scripts/invoke-agy.ps1) instead of invoking `agy` directly. Create `<workspace>/.agy/task.json` using the documented schema, then run the installed wrapper with only `-TaskFile <absolute-task-path>`. The wrapper derives the workspace from the task-file location, validates all paths, pins safe AGY flags, rejects main Git worktrees, and detects post-run scope drift. Git repositories must use a clean linked worktree; non-Git validation workspaces must be isolated directories named `agy-scratch-*`. A persistent Codex rule may allow the installed wrapper path; generate it with [scripts/install-rule.ps1](scripts/install-rule.ps1), but never allow a general `agy`, `agy -p`, `pwsh`, or `pwsh -Command` prefix. Codex rules load after Codex restarts.
+
+Before the first real invocation, run the wrapper once with `-ValidateOnly`. Put
+every final destination needed by a valid result in the initial `write_paths`;
+the successful receipt cannot later authorize a broader directory or a moved
+output. When practical, complete AGY semantic review and likely remediation before
+materializing large ignored dependency or build trees. If validation requires
+those trees earlier, record that later wrapper remediation may be ineligible and
+prepare the bounded Codex capability handoff instead of deleting the environment.
 
 The unattended prompt prohibits shell, Git, package-manager, test, and network
 commands inside AGY. Give AGY explicit read paths and let Codex run validation.
@@ -71,23 +81,30 @@ If a host-authorized AGY run returns a non-`SUCCESS` terminal status:
 After AGY finishes:
 
 1. Compare repository state with the recorded baseline and identify the actual scoped changes. Do not attribute pre-existing or concurrent user changes to AGY.
-2. Inspect the implementation independently for correctness, regressions, scope drift, missing tests, and unsafe behavior. Do not accept AGY's summary as review evidence.
-3. Run the smallest relevant lint, typecheck, unit, integration, or build checks permitted by the repository. Start focused and expand only when risk warrants it.
+2. Run an objective-specific semantic probe before expensive validation. When the
+   recorded baseline did not already satisfy the Definition of Done, require the
+   expected non-empty diff for a mutating task and verify the declared final
+   output shape or metric: for example required module directories, reduced
+   monolith size, unchanged selectors with resolved-value equivalence, or the
+   exact behavioral artifact. A valid receipt with an unexplained no-op or wrong
+   structure is a concrete finding, not completion.
+3. Inspect the implementation independently for correctness, regressions, scope drift, missing tests, and unsafe behavior. Do not accept AGY's summary as review evidence.
+4. Run the smallest relevant lint, typecheck, unit, integration, or build checks permitted by the repository. Start focused and expand only when risk warrants it.
    A successful receipt proves task/output binding, not semantic acceptance. For
    exact text bytes across platforms, prefer repository-owned EOL policy and
    verify the immutable committed blob when that is the intended portability
    boundary.
-4. If the implementation run completed with `SUCCESS` and material findings remain, send concrete findings back to the same conversation:
+5. If the implementation run completed with `SUCCESS` and material findings remain, send concrete findings back to the same conversation:
 
 ```text
 agy -p "Address these Codex review findings without changing unrelated code: <findings>" --conversation <conversation_id> --mode accept-edits --output-format json --print-timeout <duration-with-unit> --sandbox
 ```
 
-5. If the implementation run did not complete with `SUCCESS`, follow its failure
+6. If the implementation run did not complete with `SUCCESS`, follow its failure
    receipt. Use a fresh conversation only for an authorized retryable transient
    failure; otherwise stop or create a newly scoped task after resolving the
    deterministic cause.
-6. Re-review the new diff and rerun affected checks. When no loop budget was
+7. Re-review the new diff and rerun affected checks. When no loop budget was
    declared, default to at most two AGY remediation passes. If the user or owning
    coordinator explicitly selected a higher economics-based hard cap, such as 10,
    honor that ceiling. It is not a target: each pass must address a new concrete
@@ -105,6 +122,17 @@ independently review the combined result. Do not describe a valid capability
 handoff as an exhausted retry or synthesize AGY `SUCCESS`.
 
 Stop immediately if AGY changes files outside scope, overwrites user work, requests credentials, or requires new authority. Preserve evidence and ask the user how to proceed.
+
+For unattended work, prefer this phase order when dependencies permit it:
+
+```text
+ValidateOnly -> AGY implementation -> semantic probe and review
+-> AGY remediation -> runtime materialization -> focused checks -> broad gate
+```
+
+A sandbox or host-approval rejection before process creation, a wrapper
+validation-only rejection, and a receipt cache hit are not AGY invocations and do
+not consume the loop budget. Record them separately from product remediation.
 
 ## Final report
 

@@ -62,7 +62,7 @@ Restart Codex so it discovers the skill. You can then ask Codex to use
 For a reproducible release installation, ask Codex:
 
 ```text
-Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.2.
+Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.3.
 ```
 
 ## Optional unattended execution

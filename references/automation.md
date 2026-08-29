@@ -91,6 +91,33 @@ $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path ([Environ
 
 Use `-ValidateOnly` while preparing or testing a task. It validates the task and prints the resolved scope without contacting AGY.
 
+## Recommended phase order
+
+Before the first invocation, use `-ValidateOnly` and confirm that `write_paths`
+already contains every final destination required by the objective. A successful
+receipt binds the original task and outputs; it cannot authorize a later directory
+expansion or relocated module tree.
+
+When dependencies permit, use this order:
+
+1. validate the task and final path contract;
+2. run the AGY implementation;
+3. inspect the actual diff and run a cheap objective-specific semantic probe;
+4. complete evidence-driven AGY remediation;
+5. materialize large ignored dependency, build, or test trees;
+6. run focused checks and the declared broad gate.
+
+The semantic probe must distinguish completion from a syntactically valid no-op.
+When the recorded baseline did not already satisfy the Definition of Done,
+examples include a required non-empty diff, the presence of named output modules,
+a reduced source-file size, stable selector order with resolved-value equivalence,
+or another measurable invariant from the acceptance criteria.
+
+Large ignored trees can make a later remediation fail baseline validation. Do not
+delete or rebuild them merely to regain wrapper eligibility. If validation must
+materialize them before remediation, declare that constraint and the bounded Codex
+capability-handoff path before the initial invocation.
+
 ## Worker authorization visibility
 
 When a coordinator-owned Codex subagent invokes the wrapper, the host approval
