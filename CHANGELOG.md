@@ -2,6 +2,18 @@
 
 All notable changes to Delegate to AGY will be documented in this file.
 
+## 0.1.3 - 2026-08-29
+
+### Changed
+
+- Unattended runs now validate the task before invocation and require initial
+  write paths to cover the final output shape.
+- Independent review now runs an objective-specific no-op, structural, or
+  value-equivalence probe before expensive validation.
+- Recommended sequencing completes likely AGY remediation before large ignored
+  runtime trees, while preserving capability handoff when early materialization
+  is unavoidable.
+
 ## 0.1.2 - 2026-08-29
 
 ### Changed
