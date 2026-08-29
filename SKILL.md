@@ -10,6 +10,11 @@ Use AGY as an external implementation agent. Codex remains responsible for scope
 ## Preconditions and boundaries
 
 - Treat explicit use of this skill as authorization to send the scoped task and relevant workspace code to AGY. Do not send secrets, tokens, unrelated files, or environment-variable values.
+- For private repository content, record a disclosure authorization packet before
+  delegation: the trusted user turn, canonical repository, exact read paths or
+  content classes, write paths, and exclusions. Verify that a subagent's inherited
+  context actually contains that user authorization; a fixed turn count or a
+  coordinator relay alone is not proof at a host approval boundary.
 - When a Codex subagent will invoke AGY, ensure that worker directly inherits the
   user's explicit external-delegation authorization as trusted input. Some host
   approval surfaces do not treat coordinator-relayed text as equivalent user
@@ -121,6 +126,11 @@ smallest next action. Codex may finish only the already authorized scope and mus
 independently review the combined result. Do not describe a valid capability
 handoff as an exhausted retry or synthesize AGY `SUCCESS`.
 
+Classify a capability handoff with one concise evidence-backed reason such as
+`runtime_materialized`, `runtime_only_finding`, `unsupported_operation`,
+`external_disclosure_denied`, or `new_authority_required`. The category explains
+why the executor changed; it does not expand Codex's authorized scope.
+
 Stop immediately if AGY changes files outside scope, overwrites user work, requests credentials, or requires new authority. Preserve evidence and ask the user how to proceed.
 
 For unattended work, prefer this phase order when dependencies permit it:
@@ -133,13 +143,19 @@ ValidateOnly -> AGY implementation -> semantic probe and review
 A sandbox or host-approval rejection before process creation, a wrapper
 validation-only rejection, and a receipt cache hit are not AGY invocations and do
 not consume the loop budget. Record them separately from product remediation.
+When a pre-process disclosure decision blocks AGY, record `invocations: 0`, the
+authorization boundary, and the bounded Codex handoff category. Do not describe
+the event as an AGY failure or retry the same relay.
 
 ## Final report
 
 Report the AGY version and terminal status, failure category and retryability when
 applicable, conversation routing status, files changed, Codex review outcome,
 validation commands and results, remediation passes, capability handoff when one
-occurred, per-invocation usage deltas from the receipt, and unresolved risks.
+occurred and its category, per-invocation usage deltas from the receipt, and
+unresolved risks. Report pre-process decisions, validation-only runs, cache hits,
+and real invocations as separate counters; use an explicit zero for a blocked run
+that never created an AGY process.
 Distinguish AGY's conversation-cumulative counters from each invocation delta;
 report unavailable fields as unavailable. Keep raw conversation IDs out of public
 issues, trackers, and release evidence.

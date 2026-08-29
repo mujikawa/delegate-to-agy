@@ -62,7 +62,7 @@ Restart Codex so it discovers the skill. You can then ask Codex to use
 For a reproducible release installation, ask Codex:
 
 ```text
-Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.3.
+Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.4.
 ```
 
 ## Optional unattended execution
@@ -93,6 +93,8 @@ requirements, read [Unattended automation](references/automation.md).
 - A worker that launches AGY may need to inherit that user authorization directly;
   coordinator-relayed text is not guaranteed to satisfy the host approval trust
   boundary.
+- Private-source delegation records and verifies the trusted authorization turn,
+  canonical repository, exact disclosed path classes, write scope, and exclusions.
 - AGY runs with `--sandbox`; the wrapper does not use
   `--dangerously-skip-permissions`.
 - Paths must remain inside the delegated workspace. Rooted paths, `..` escapes,
@@ -117,7 +119,7 @@ requirements, read [Unattended automation](references/automation.md).
 ```text
 SKILL.md                     Skill entrypoint and review workflow
 CHANGELOG.md                  Version history
-RELEASE-v0.1.2.md             Latest tagged-release notes
+RELEASE-v0.1.4.md             Latest tagged-release notes
 agents/openai.yaml           Codex UI metadata
 references/automation.md     Unattended task schema and invariants
 scripts/invoke-agy.ps1       Validated AGY invocation wrapper
