@@ -21,12 +21,21 @@ Use AGY as an external implementation agent. Codex remains responsible for scope
   authorization. If launch is rejected at that boundary, do not bypass it or
   repeatedly resend the same relay; create a replacement only with explicit user
   authorization for that topology and direct inheritance.
-- Preserve the user's existing changes. Never require a clean worktree, discard changes, create commits, push, install dependencies, or perform external or destructive actions unless the user separately authorized them.
+- Preserve the user's existing changes. Ordinary interactive delegation can use a
+  recorded dirty baseline; do not clean or discard it. Unattended wrapper execution
+  instead requires a clean linked worktree or an isolated non-Git scratch directory
+  as described below. Create that isolation only within existing authorization.
+  Commits, pushes, dependency installation, external side effects, and destructive
+  actions remain subject to their applicable authorization.
 - Run only one write-capable agent in the target workspace at a time. Do not let AGY and another agent edit the same files concurrently.
 - Verify `agy` is available with `Get-Command agy` on Windows or `command -v agy` on POSIX, and record `agy --version`.
 - Before a write-capable delegation, resolve and record the canonical absolute repository root, `git status --short`, and the relevant diff. If the workspace is not under Git, restrict the task to named paths and use available scoped file comparisons; tell the user when reliable change attribution is not possible.
 
 ## Delegate
+
+Choose ordinary interactive delegation or unattended wrapper execution before
+preflight. Apply the prerequisites of that mode; the wrapper-specific clean
+linked-worktree requirement does not apply to ordinary interactive delegation.
 
 Build an outcome-focused prompt that includes:
 
@@ -79,7 +88,9 @@ If a host-authorized AGY run returns a non-`SUCCESS` terminal status:
   the failed conversation; backend restarts or lost workspace context can make a
   resumed agent search unrelated paths.
 - If there are changes, do not retry automatically. Review and validate the artifacts, but report that the AGY run itself failed. Independently verified artifacts may still be usable; never relabel the terminal run as successful.
-- Stop after that single fresh retry and report the infrastructure failure if it remains non-`SUCCESS`.
+- Stop AGY retries after that single fresh retry if it remains non-`SUCCESS`.
+  Report the infrastructure failure and apply the Codex handoff below; this does
+  not by itself cancel the already-authorized outcome.
 
 ## Review and remediate
 
@@ -107,8 +118,8 @@ agy -p "Address these Codex review findings without changing unrelated code: <fi
 
 6. If the implementation run did not complete with `SUCCESS`, follow its failure
    receipt. Use a fresh conversation only for an authorized retryable transient
-   failure; otherwise stop or create a newly scoped task after resolving the
-   deterministic cause.
+   failure; otherwise stop AGY invocation, inspect any partial changes, and apply
+   the Codex handoff below. A new task is not required merely because AGY stopped.
 7. Re-review the new diff and rerun affected checks. When no loop budget was
    declared, default to at most two AGY remediation passes. If the user or owning
    coordinator explicitly selected a higher economics-based hard cap, such as 10,
@@ -118,20 +129,31 @@ agy -p "Address these Codex review findings without changing unrelated code: <fi
    drift, new authority, or an operation AGY cannot perform with its permitted
    tools.
 
-When AGY reports that the remaining work is outside its capability or permitted
-tool boundary, stop before the hard cap and hand the task back to Codex. Preserve
+### Codex handoff
+
+When AGY reaches its retry/remediation cap, cannot make progress, or cannot perform
+the remaining operation within its capability or permitted tools, stop AGY
+invocations and assess the already-authorized Codex next action. Preserve
 the baseline, actual diff, completed acceptance criteria, remaining gap, failed or
 unavailable operation, validation evidence, receipt, conversation routing, and the
-smallest next action. Codex may finish only the already authorized scope and must
-independently review the combined result. Do not describe a valid capability
-handoff as an exhausted retry or synthesize AGY `SUCCESS`.
+smallest next action. Codex may continue within the already authorized scope when
+the user has not required AGY itself to complete the work. Do not ask again merely
+because the executor stopped. If AGY-only completion is required, report the blocker
+instead of substituting Codex. A host denial is never permission to bypass the denied
+action; Codex work must be independently allowed. Review the combined result.
+Distinguish capability handoffs from exhausted caps and infrastructure failures;
+never synthesize AGY `SUCCESS`.
 
 Classify a capability handoff with one concise evidence-backed reason such as
 `runtime_materialized`, `runtime_only_finding`, `unsupported_operation`,
 `external_disclosure_denied`, or `new_authority_required`. The category explains
 why the executor changed; it does not expand Codex's authorized scope.
 
-Stop immediately if AGY changes files outside scope, overwrites user work, requests credentials, or requires new authority. Preserve evidence and ask the user how to proceed.
+If AGY changes files outside scope, overwrites user work, requests credentials, or
+requires new authority, stop AGY and any dependent writes. Preserve and inspect
+evidence. Continue unaffected authorized inspection or validation; ask only for a
+necessary recovery decision or missing authority. Do not silently overwrite user
+work or undo unexpected changes.
 
 For unattended work, prefer this phase order when dependencies permit it:
 
@@ -149,7 +171,13 @@ the event as an AGY failure or retry the same relay.
 
 ## Final report
 
-Report the AGY version and terminal status, failure category and retryability when
+Keep the user-facing summary concise: delivered outcome, validation, AGY terminal
+status, whether Codex took over, and unresolved blockers. Expand usage and retry
+details when requested or material to a decision. Store the following detailed
+evidence in the authorized private run record and link it when useful; do not
+require every field in chat.
+
+Record the AGY version and terminal status, failure category and retryability when
 applicable, conversation routing status, files changed, Codex review outcome,
 validation commands and results, remediation passes, capability handoff when one
 occurred and its category, per-invocation usage deltas from the receipt, and

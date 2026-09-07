@@ -22,7 +22,9 @@ checkpoint after every loop. The default remains two remediation passes when no
 budget is declared, while a user may deliberately select a higher cap such as 10
 when AGY is the lower-cost executor. The cap is not a target. AGY should stop and
 hand off evidence to Codex as soon as it cannot complete the remaining operation
-with its permitted tools.
+with its permitted tools. Codex can finish already-authorized work unless the user
+requires AGY-only completion. AGY failure or a handoff remains visible in the final
+summary; a host denial cannot be bypassed by changing executors.
 
 The unattended wrapper also writes receipts. Successful receipts bind the AGY
 conversation, task hash, and output hashes; failed receipts classify the failure
@@ -38,8 +40,9 @@ therefore does not add a usage attempt.
 - Codex and Git available on `PATH`.
 - Google Antigravity CLI (`agy`) installed and authenticated interactively at
   least once.
-- A clean linked Git worktree for repository automation, or an isolated
-  non-Git directory named `agy-scratch-*`.
+- For unattended wrapper execution: a clean linked Git worktree, or an isolated
+  non-Git directory named `agy-scratch-*`. Ordinary interactive delegation may use
+  a recorded dirty baseline while preserving existing changes.
 
 ## Install
 
@@ -62,7 +65,7 @@ Restart Codex so it discovers the skill. You can then ask Codex to use
 For a reproducible release installation, ask Codex:
 
 ```text
-Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.4.
+Use $skill-installer to install mujikawa/delegate-to-agy at ref v0.1.5.
 ```
 
 ## Optional unattended execution
@@ -119,7 +122,7 @@ requirements, read [Unattended automation](references/automation.md).
 ```text
 SKILL.md                     Skill entrypoint and review workflow
 CHANGELOG.md                  Version history
-RELEASE-v0.1.4.md             Latest tagged-release notes
+RELEASE-v0.1.5.md             Latest tagged-release notes
 agents/openai.yaml           Codex UI metadata
 references/automation.md     Unattended task schema and invariants
 scripts/invoke-agy.ps1       Validated AGY invocation wrapper

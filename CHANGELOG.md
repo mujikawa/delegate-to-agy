@@ -2,6 +2,18 @@
 
 All notable changes to Delegate to AGY will be documented in this file.
 
+## 0.1.5 - 2026-09-07
+
+### Changed
+
+- Distinguish ordinary interactive baseline preservation from unattended wrapper
+  isolation requirements.
+- Clarify that an executor stop permits eligible Codex completion within existing
+  authorization, while AGY-only requests and host denials remain binding.
+- Keep user-facing completion summaries concise and detailed run accounting in
+  private evidence records.
+- Preserve wrapper behavior, task/receipt schemas, and AGY retry/remediation caps.
+
 ## 0.1.4 - 2026-08-30
 
 ### Added
